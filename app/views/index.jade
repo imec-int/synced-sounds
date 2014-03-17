@@ -10,6 +10,10 @@ html
 		script(src='/socket.io/socket.io.js')
 		script(type='text/javascript', src='/vendor/jquery.min.js')
 		script(type='text/javascript', src='/vendor/jquery.tmpl.min.js')
+		script(type='text/javascript', src='/vendor/underscore-min.js')
+		script(type='text/javascript', src='/javascripts/BUfferloader.js')
 		script(type='text/javascript', src='/javascripts/index.js')
 	body
-		| Hello Hexamusic #{title}
+		| Synced Sounds
+		br
+		button#playsound Play sound to activate webkitAudioContext (only needed on mobile devices).

@@ -1,11 +1,27 @@
 var App = function (options){
 
 	var socket;
+	var traveltimes = [];
+	var traveltime = 0;
+	var timeoffset = 0;
+	var timingCalculationsActive = false;
+
+	var context, bufferLoader;
 
 	var init = function (){
 		console.log("init");
 
+		window.AudioContext = window.AudioContext || window.webkitAudioContext;
+		context = new AudioContext();
+
+		initSounds();
 		initSocket();
+
+
+		$('#playsound').click(function (event) {
+			onPlaysound(0);
+			doTimingCalculations();
+		});
 	};
 
 	var initSocket = function (){
@@ -25,120 +41,119 @@ var App = function (options){
 		});
 		socket.on('connect', function() {
 			console.log('connected');
+			doTimingCalculations();
 		});
 
-		socket.on('somecrazyevent', onSomecrazyevent);
-		socket.on('midi', onMidi);
+		socket.on('playsound', onPlaysound);
 	};
-
-	var onPlaysound = function (servertime) {
-		// console.log('servertime', servertime);
-		// console.log('timeoffset', timeoffset);
-
-		var localplaytime = servertime - timeoffset;
-
-		// console.log(localplaytime);
-
-		noteOn(95, 100, 0, localplaytime);
-		setTimeout(function () {
-			noteOff(95, 100, 0);
-		},500);
-	};
-
-	var onMidi = function (data) {
-		console.log(data);
-	};
-
-	var noteOn = function(note, velocity, channel, playtime){
-		if(!playtime) playtime = 0;
-
-		var oscillator = context.createOscillator();
-		var gainNode = context.createGainNode();
-		if(0 <= channel && channel <= 3)
-			// Sine wave is type = 0 -> default
-			// Square wave is type = 1
-			// Sawtooth wave is type = 2
-			// Triangle wave is type = 3
-			oscillator.type = channel;
-		oscillator.frequency.value = 440 * Math.pow(2,(note-69)/12); //note to frequency mapping
-		oscillator.connect(gainNode);
-		gainNode.connect(context.destination);
-		gainNode.gain.value = 0.1 + 0.9 * velocity / 127.0;
-		if(notes[note]) notes[note].noteOff(0);
-		notes[note] = oscillator;
-		notes[note].noteOn(context.currentTime +  playtime);
-
-		console.log( playtime );
-		console.log( context.currentTime );
-	}
-
-	var noteOff = function(note, velocity, channel){
-		if(notes[note]){
-			notes[note].noteOff(0);
-			notes[note] = null;
-		}
-	}
 
 	var doTimingCalculations = function () {
-		console.log('> syncing time with server');
+		// initialize webaudio context:
+		if(context.currentTime == 0){
+			setTimeout(function () {
+				if(context.currentTime == 0){
+					context.createGainNode();
 
-		determineAveragePing(function (err, traveltime) {
-			// console.log('traveltime: ', traveltime);
-
-			getRealServerTime(traveltime, function (err, realServertime) {
-				// console.log('realServertime: ', realServertime);
-
-				// save the offset:
-				timeoffset = realServertime - context.currentTime;
-
-				// console.log('timeoffset: ', timeoffset);
-
-				clearTimeout(timeoutObject)
-				timeoutObject = setTimeout(function () {
-					doTimingCalculations();
-				},10000);
-			});
-		});
+					setTimeout(function () {
+						if(context.currentTime == 0){
+							alert("can't seem to start timing calculations using webkitAudioContext. Are you on a mobile device?");
+						}else{
+							determineTraveltime(context);
+						}
+					},10);
+				}
+			},10);
+		}else{
+			determineTraveltime();
+		}
 	};
 
-	var determineAveragePing = function (callback) {
-		var traveltimes = [];
+	var determineTraveltime = function () {
+		if(timingCalculationsActive) return;
+
+		timingCalculationsActive = true;
+
 		ping();
 
 		function ping () {
+			// console.log('ping', context.currentTime);
+
 			socket.emit('ping', context.currentTime, function (data) {
 
 				// console.log(data);
 
 				var currenttime = context.currentTime;
-				var traveltime = (currenttime - data.clienttime)/2;
-				traveltimes.push(traveltime);
+				var currentTraveltime = (currenttime - data.clienttime)/2;
 
-				if(traveltimes.length == 10){
-					// calculate average:
-					var total = 0;
-					for (var i = traveltimes.length - 1; i >= 0; i--) {
-						total += traveltimes[i];
-					};
-					var averageTraveltime = total/traveltimes.length;
-					if(callback) callback(null, averageTraveltime);
+				// console.log('currentTraveltime', currentTraveltime);
 
-				}else{
-					setTimeout(function () {
-						ping();// do some more pings
-					},100);
-				}
+				traveltimes.push(currentTraveltime);
+
+				// only keep the last 10 traveltimes
+				traveltimes = _.last(traveltimes, 10);
+
+				// calculate average:
+				var total = 0;
+				for (var i = traveltimes.length - 1; i >= 0; i--) {
+					total += traveltimes[i];
+				};
+				traveltime = total/traveltimes.length;
+
+				// console.log('traveltimes', traveltimes);
+
+				//inform the server of our traveltime:
+				socket.emit('traveltime', traveltime);
+
+				//determine difference between server and client time:
+
+				// first: get real server time (so the servertime NOW) (that's the time of the server + the time it took for that value to get here):
+				var realServertime = data.servertime + traveltime;
+
+				// substract the clienttime from real servertime:
+				timeoffset = realServertime - context.currentTime;
+
+				// console.log('timeoffset', timeoffset, 'traveltime', traveltime);
+
+				// now evertime we want the real server time, we can
+				// add the timeoffset to the currentTime
+				// or
+				// if we get a servertime we can can
+				// substract the timeoffset from that time
+
+				setTimeout(function () {
+					ping();// continue pinging
+				},1000);
 
 			});
 		} //end ping()
-
 	};
 
-	var getRealServerTime = function (traveltime, callback) {
-		socket.emit('getRealServertime', traveltime, function (data) {
-			console.log(data);
-			callback(null, data.realServertime);
-		});
+	var initSounds = function () {
+		bufferLoader = new BufferLoader(
+			context,
+			['/sounds/snare.wav'],
+			null,
+			null,
+			function (err) {
+				return console.log(err);
+			}
+		);
+		bufferLoader.load();
+	}
+
+	var onPlaysound = function (serverPlaytime) {
+
+
+		var localPlaytime = serverPlaytime - timeoffset;
+
+		var source = context.createBufferSource();
+		source.buffer = bufferLoader.bufferList[0];
+		console.log(bufferLoader.bufferList[0]);
+		source.connect(context.destination);
+		if (!source.start) source.start = source.noteOn;
+		source.start(localPlaytime);
+
+		console.log('playingsoud', serverPlaytime, timeoffset, localPlaytime);
 	};
 
 

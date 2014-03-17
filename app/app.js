@@ -4,9 +4,7 @@ var express = require('express');
 var http = require('http')
 var path = require('path');
 var socketio = require('socket.io');
-var socketclient = require('socket.io-client'); // to connect to our server
 var utils = require('./utils');
-var midimapping = require('./midimapping');
 
 var app = express();
 
@@ -43,52 +41,25 @@ var io = socketio.listen(webserver);
 io.set('log level', 0);
 
 
-// Client Socket (speciaal om met onze mixmini te verbinden):
-clientio = socketclient.connect('mixmini.mixlab.be', {port: 3000});
-
-clientio.on('connect', function () {
-	console.log("socket connected to mixmini.mixlab.be");
-});
-
-clientio.on('midi', function (rawmidiMessage) {
-	var readableMessage = midimapping.parseMessage(rawmidiMessage);
-
-	console.log(rawmidiMessage);
-	console.log(readableMessage);
-
-	io.sockets.emit('midi', readableMessage);
-});
-
-
 
 // syncing functions:
 io.sockets.on('connection', function (socket) {
 	console.log('[' + socket.handshake.address.address + '] user connected');
 
-	socket.on('ping', function (clienttime, fn) {
-
+	socket.on('ping', function (clienttime, socketCallback) {
 		// console.log(clienttime);
 
-		//respond:
-		fn({
+		console.log("ping from " + socket.handshake.address.address);
+
+		//respond immediatly:
+		socketCallback({
 			clienttime: clienttime,
 			servertime: Date.now()/1000
 		});
-
 	});
 
-	socket.on("getRealServertime", function (traveltime, fn) {
-
-		var now = Date.now()/1000;
-
-		console.log('[' + socket.handshake.address.address + '] traveltime: ' + traveltime);
-
-		fn({
-			realServertime: now + traveltime,
-			servertime: now
-		});
-
-		// store traveltime inside socket :-)
+	socket.on('traveltime', function (traveltime) {
+		// just store the traveltime inside the socket:
 		socket.traveltime = traveltime;
 	});
 
@@ -97,10 +68,7 @@ io.sockets.on('connection', function (socket) {
 	});
 });
 
-
-// send out some sounds:
-function sendOutSound () {
-
+function getBiggestTraveltime () {
 	// find client with biggest travel time:
 	var biggestTravelTime = 0;
 	for (var i = io.sockets.clients().length - 1; i >= 0; i--) {
@@ -109,10 +77,18 @@ function sendOutSound () {
 			biggestTravelTime = socket.traveltime;
 		}
 	};
-	console.log('biggestTravelTime: ' + biggestTravelTime);
-
-	// send out sound, but add biggest travel time, so that the slowest client still plays the sound in sync
-	io.sockets.emit('playsound', Date.now()/1000 + biggestTravelTime);
+	return biggestTravelTime;
 }
+
+
+// send out some sounds:
+function sendOutSound () {
+	console.log('biggestTravelTime: ' + getBiggestTraveltime());
+	// send out sound, but add biggest travel time, so that the slowest client still plays the sound in sync
+	io.sockets.emit('playsound', Date.now()/1000 + getBiggestTraveltime() + 10 );
+}
+
+setInterval(sendOutSound, 2222);
+
 
 
