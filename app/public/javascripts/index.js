@@ -69,16 +69,10 @@ var App = function (options){
 		function ping () {
 			if(!timingCalculationsActive) return;
 
-			// console.log('ping', context.currentTime);
-
 			socket.emit('ping', context.currentTime, function (data) {
-
-				// console.log(data);
 
 				var currenttime = context.currentTime;
 				var currentTraveltime = (currenttime - data.clienttime)/2;
-
-				// console.log('currentTraveltime', currentTraveltime);
 
 				traveltimes.push(currentTraveltime);
 
@@ -92,7 +86,7 @@ var App = function (options){
 				};
 				var traveltime = total/traveltimes.length;
 
-				console.log('traveltime', traveltime);
+				console.log('traveltime', Math.round(traveltime*1000));
 
 				//inform the server of our traveltime:
 				socket.emit('traveltime', traveltime);
@@ -104,8 +98,6 @@ var App = function (options){
 
 				// substract the clienttime from real servertime:
 				timeoffset = realServertime - context.currentTime;
-
-				// console.log('timeoffset', timeoffset, 'traveltime', traveltime);
 
 				// now evertime we want the real server time, we can
 				// add the timeoffset to the currentTime
@@ -130,6 +122,7 @@ var App = function (options){
 
 	var stopTimingCalculations = function () {
 		timingCalculationsActive = false;
+		socket.emit('cleartraveltime'); //dont use my traveltime anymore
 	};
 
 	var initSounds = function () {
@@ -152,19 +145,7 @@ var App = function (options){
 
 	var onPlaysound = function (serverPlaytime) {
 		var localPlaytime = getLocalPlaytime(serverPlaytime);
-		// console.log('serverPlaytime', serverPlaytime, 'timeoffset', timeoffset, 'localPlaytime', localPlaytime);
 		playSound(sounds[1], localPlaytime);
-
-		var delayBeforePlay = (serverPlaytime - (context.currentTime + timeoffset))*1000;
-		if(timeoffset == null) delayBeforePlay = 0;
-		console.log('delayBeforePlay', delayBeforePlay);
-
-		setTimeout(function () {
-			$('body').addClass('blink');
-			setTimeout(function () {
-				$('body').removeClass('blink');
-			},200);
-		}, delayBeforePlay);
 	};
 
 	var playSound = function (bufferSource, contexttime) {
@@ -174,8 +155,21 @@ var App = function (options){
 		if (!source.start) source.start = source.noteOn;
 
 		if(contexttime === undefined || contexttime === null) contexttime = context.currentTime;
-		console.log('playing sound in ' + (contexttime - context.currentTime) + ' seconds');
+
+		var delaytime = contexttime - context.currentTime;
+		setTimeout(blinkBackground, delaytime);
+		console.log('delaytime', Math.round(delaytime*1000));
+
 		source.start(contexttime);
+
+
+	};
+
+	var blinkBackground = function () {
+		$('body').addClass('blink');
+		setTimeout(function () {
+			$('body').removeClass('blink');
+		},200);
 	}
 
 

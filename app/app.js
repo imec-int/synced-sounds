@@ -64,6 +64,12 @@ io.sockets.on('connection', function (socket) {
 		console.log('[' + socket.handshake.address.address + '] traveltime: ' + Math.round(socket.traveltime*1000));
 	});
 
+	socket.on('cleartraveltime', function () {
+		socket.traveltime = null;
+		console.log('[' + socket.handshake.address.address + '] clearing traveltime');
+	});
+
+
 	socket.on('disconnect', function() {
 		console.log('[' + socket.handshake.address.address + '] user disconnected');
 	});
@@ -90,7 +96,7 @@ function sendOutSound () {
 	console.log('biggestTravelTime: ' + Math.round(biggestTravelTime*1000));
 	// send out sound, but add biggest travel time, so that the slowest client still plays the sound in sync
 	// + add some time to make sure it doesn't arrive to early
-	io.sockets.emit('playsound', Date.now()/1000 + biggestTravelTime + 0.010 );
+	io.sockets.emit('playsound', Date.now()/1000 + biggestTravelTime + 0.000 );
 }
 
 setInterval(sendOutSound, 2222);
