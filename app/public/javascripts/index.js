@@ -1,5 +1,7 @@
 var App = function (options){
 
+	var pingEveryXMilliseconds = 700;
+
 	var socket;
 	var traveltimes = [];
 	var timeoffset = null;
@@ -111,7 +113,7 @@ var App = function (options){
 
 				setTimeout(function () {
 					ping();// continue pinging
-				},1000);
+				},pingEveryXMilliseconds);
 
 			});
 		} //end ping()
