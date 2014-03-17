@@ -58,6 +58,8 @@ var App = function (options){
 	};
 
 	var startTimingCalculations = function () {
+		if(timingCalculationsActive == true) return; //already in progress
+
 		if(context.currentTime == 0) context.createGainNode(); //force start context
 
 		timingCalculationsActive = true;
@@ -152,6 +154,17 @@ var App = function (options){
 		var localPlaytime = getLocalPlaytime(serverPlaytime);
 		// console.log('serverPlaytime', serverPlaytime, 'timeoffset', timeoffset, 'localPlaytime', localPlaytime);
 		playSound(sounds[1], localPlaytime);
+
+		var delayBeforePlay = (serverPlaytime - (context.currentTime + timeoffset))*1000;
+		if(timeoffset == null) delayBeforePlay = 0;
+		console.log('delayBeforePlay', delayBeforePlay);
+
+		setTimeout(function () {
+			$('body').addClass('blink');
+			setTimeout(function () {
+				$('body').removeClass('blink');
+			},200);
+		}, delayBeforePlay);
 	};
 
 	var playSound = function (bufferSource, contexttime) {
