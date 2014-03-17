@@ -95,7 +95,7 @@ function sendOutSound () {
 
 	console.log('biggestTravelTime: ' + Math.round(biggestTravelTime*1000));
 	// send out sound, but add biggest travel time, so that the slowest client still plays the sound in sync
-	// + add some time to make sure it doesn't arrive to early
+	// + add some time to make sure it doesn't arrive too early (currently 0.000)
 	io.sockets.emit('playsound', Date.now()/1000 + biggestTravelTime + 0.000 );
 }
 
