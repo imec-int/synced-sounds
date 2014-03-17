@@ -2,11 +2,10 @@ var App = function (options){
 
 	var socket;
 	var traveltimes = [];
-	var traveltime = 0;
-	var timeoffset = 0;
+	var timeoffset = null;
 	var timingCalculationsActive = false;
 
-	var context, bufferLoader;
+	var context, sounds;
 
 	var init = function (){
 		console.log("init");
@@ -18,9 +17,19 @@ var App = function (options){
 		initSocket();
 
 
-		$('#playsound').click(function (event) {
-			onPlaysound(0);
-			doTimingCalculations();
+		$('#activate').click(function (event) {
+			playSound(sounds[0]); // for iOS and other devices that want a song played before
+			startTimingCalculations();
+			$('#status').html('synced');
+		});
+
+		$('#deactivate').click(function (event) {
+			stopTimingCalculations();
+			$('#status').html('not synced');
+		});
+
+		$('#enableaudiocontext').click(function (event) {
+			playSound(sounds[0]); // for iOS and other devices that want a song played before
 		});
 	};
 
@@ -41,41 +50,21 @@ var App = function (options){
 		});
 		socket.on('connect', function() {
 			console.log('connected');
-			doTimingCalculations();
 		});
 
 		socket.on('playsound', onPlaysound);
 	};
 
-	var doTimingCalculations = function () {
-		// initialize webaudio context:
-		if(context.currentTime == 0){
-			setTimeout(function () {
-				if(context.currentTime == 0){
-					context.createGainNode();
-
-					setTimeout(function () {
-						if(context.currentTime == 0){
-							alert("can't seem to start timing calculations using webkitAudioContext. Are you on a mobile device?");
-						}else{
-							determineTraveltime(context);
-						}
-					},10);
-				}
-			},10);
-		}else{
-			determineTraveltime();
-		}
-	};
-
-	var determineTraveltime = function () {
-		if(timingCalculationsActive) return;
+	var startTimingCalculations = function () {
+		if(context.currentTime == 0) context.createGainNode(); //force start context
 
 		timingCalculationsActive = true;
 
 		ping();
 
 		function ping () {
+			if(!timingCalculationsActive) return;
+
 			// console.log('ping', context.currentTime);
 
 			socket.emit('ping', context.currentTime, function (data) {
@@ -97,9 +86,9 @@ var App = function (options){
 				for (var i = traveltimes.length - 1; i >= 0; i--) {
 					total += traveltimes[i];
 				};
-				traveltime = total/traveltimes.length;
+				var traveltime = total/traveltimes.length;
 
-				// console.log('traveltimes', traveltimes);
+				console.log('traveltime', traveltime);
 
 				//inform the server of our traveltime:
 				socket.emit('traveltime', traveltime);
@@ -128,11 +117,27 @@ var App = function (options){
 		} //end ping()
 	};
 
+	var getLocalPlaytime = function (serverPlaytime) {
+		if(timeoffset == null)
+			return context.currentTime;
+		else
+			return serverPlaytime - timeoffset;
+	};
+
+	var stopTimingCalculations = function () {
+		timingCalculationsActive = false;
+	};
+
 	var initSounds = function () {
 		bufferLoader = new BufferLoader(
 			context,
-			['/sounds/snare.wav'],
-			null,
+			[
+				'/sounds/silence.wav',
+				'/sounds/snare.wav'
+			],
+			function (bufferlist) {
+				sounds = bufferlist;
+			},
 			null,
 			function (err) {
 				return console.log(err);
@@ -142,19 +147,21 @@ var App = function (options){
 	}
 
 	var onPlaysound = function (serverPlaytime) {
+		var localPlaytime = getLocalPlaytime(serverPlaytime);
+		// console.log('serverPlaytime', serverPlaytime, 'timeoffset', timeoffset, 'localPlaytime', localPlaytime);
+		playSound(sounds[1], localPlaytime);
+	};
 
-
-		var localPlaytime = serverPlaytime - timeoffset;
-
+	var playSound = function (bufferSource, contexttime) {
 		var source = context.createBufferSource();
-		source.buffer = bufferLoader.bufferList[0];
-		console.log(bufferLoader.bufferList[0]);
+		source.buffer = bufferSource;
 		source.connect(context.destination);
 		if (!source.start) source.start = source.noteOn;
-		source.start(localPlaytime);
 
-		console.log('playingsoud', serverPlaytime, timeoffset, localPlaytime);
-	};
+		if(contexttime === undefined || contexttime === null) contexttime = context.currentTime;
+		console.log('playing sound in ' + (contexttime - context.currentTime) + ' seconds');
+		source.start(contexttime);
+	}
 
 
 	return {

@@ -4,6 +4,7 @@ var express = require('express');
 var http = require('http')
 var path = require('path');
 var socketio = require('socket.io');
+var util = require('util');
 var utils = require('./utils');
 
 var app = express();
@@ -47,9 +48,8 @@ io.sockets.on('connection', function (socket) {
 	console.log('[' + socket.handshake.address.address + '] user connected');
 
 	socket.on('ping', function (clienttime, socketCallback) {
-		// console.log(clienttime);
 
-		console.log("ping from " + socket.handshake.address.address);
+		// console.log('[' + socket.handshake.address.address + '] ping | clienttime: ' + Math.round(clienttime*1000));
 
 		//respond immediatly:
 		socketCallback({
@@ -61,6 +61,7 @@ io.sockets.on('connection', function (socket) {
 	socket.on('traveltime', function (traveltime) {
 		// just store the traveltime inside the socket:
 		socket.traveltime = traveltime;
+		console.log('[' + socket.handshake.address.address + '] traveltime: ' + Math.round(socket.traveltime*1000));
 	});
 
 	socket.on('disconnect', function() {
@@ -73,6 +74,7 @@ function getBiggestTraveltime () {
 	var biggestTravelTime = 0;
 	for (var i = io.sockets.clients().length - 1; i >= 0; i--) {
 		var socket = io.sockets.clients()[i];
+		if(!socket.traveltime) continue;
 		if( socket.traveltime > biggestTravelTime){
 			biggestTravelTime = socket.traveltime;
 		}
@@ -83,9 +85,12 @@ function getBiggestTraveltime () {
 
 // send out some sounds:
 function sendOutSound () {
-	console.log('biggestTravelTime: ' + getBiggestTraveltime());
+	var biggestTravelTime = getBiggestTraveltime();
+
+	console.log('biggestTravelTime: ' + Math.round(biggestTravelTime*1000));
 	// send out sound, but add biggest travel time, so that the slowest client still plays the sound in sync
-	io.sockets.emit('playsound', Date.now()/1000 + getBiggestTraveltime() + 10 );
+	// + add some time to make sure it doesn't arrive to early
+	io.sockets.emit('playsound', Date.now()/1000 + biggestTravelTime + 0.010 );
 }
 
 setInterval(sendOutSound, 2222);

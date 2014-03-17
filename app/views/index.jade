@@ -14,6 +14,10 @@ html
 		script(type='text/javascript', src='/javascripts/BUfferloader.js')
 		script(type='text/javascript', src='/javascripts/index.js')
 	body
-		| Synced Sounds
+		span#status
 		br
-		button#playsound Play sound to activate webkitAudioContext (only needed on mobile devices).
+		button#activate Activate Sync
+		button#deactivate Deactivate Sync
+		br
+		br
+		button#enableaudiocontext Enable Audio Context
