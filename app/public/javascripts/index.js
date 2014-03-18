@@ -1,11 +1,7 @@
 var App = function (options){
 
-	var pingEveryXMilliseconds = 700;
-
 	var socket;
-	var traveltimes = [];
-	var timeoffset = null;
-	var timingCalculationsActive = false;
+	var sync;
 
 	var context, sounds;
 
@@ -18,15 +14,21 @@ var App = function (options){
 		initSounds();
 		initSocket();
 
+		sync = new Sync({
+			socket: socket,
+			audioContext: context,
+			pingtime: 700
+		});
+
 
 		$('#activate').click(function (event) {
 			playSound(sounds[0]); // for iOS and other devices that want a song played before
-			startTimingCalculations();
+			sync.activate();
 			$('#status').html('synced');
 		});
 
 		$('#deactivate').click(function (event) {
-			stopTimingCalculations();
+			sync.deactivate();
 			$('#status').html('not synced');
 		});
 
@@ -57,74 +59,6 @@ var App = function (options){
 		socket.on('playsound', onPlaysound);
 	};
 
-	var startTimingCalculations = function () {
-		if(timingCalculationsActive == true) return; //already in progress
-
-		if(context.currentTime == 0) context.createGainNode(); //force start context
-
-		timingCalculationsActive = true;
-
-		ping();
-
-		function ping () {
-			if(!timingCalculationsActive) return;
-
-			socket.emit('ping', context.currentTime, function (data) {
-
-				var currenttime = context.currentTime;
-				var currentTraveltime = (currenttime - data.clienttime)/2;
-
-				traveltimes.push(currentTraveltime);
-
-				// only keep the last 10 traveltimes
-				traveltimes = _.last(traveltimes, 10);
-
-				// calculate average:
-				var total = 0;
-				for (var i = traveltimes.length - 1; i >= 0; i--) {
-					total += traveltimes[i];
-				};
-				var traveltime = total/traveltimes.length;
-
-				console.log('traveltime', Math.round(traveltime*1000));
-
-				//inform the server of our traveltime:
-				socket.emit('traveltime', traveltime);
-
-				//determine difference between server and client time:
-
-				// first: get real server time (so the servertime NOW) (that's the time of the server + the time it took for that value to get here):
-				var realServertime = data.servertime + traveltime;
-
-				// substract the clienttime from real servertime:
-				timeoffset = realServertime - context.currentTime;
-
-				// now evertime we want the real server time, we can
-				// add the timeoffset to the currentTime
-				// or
-				// if we get a servertime we can can
-				// substract the timeoffset from that time
-
-				setTimeout(function () {
-					ping();// continue pinging
-				},pingEveryXMilliseconds);
-
-			});
-		} //end ping()
-	};
-
-	var getLocalPlaytime = function (serverPlaytime) {
-		if(timeoffset == null)
-			return context.currentTime;
-		else
-			return serverPlaytime - timeoffset;
-	};
-
-	var stopTimingCalculations = function () {
-		timingCalculationsActive = false;
-		socket.emit('cleartraveltime'); //dont use my traveltime anymore
-	};
-
 	var initSounds = function () {
 		bufferLoader = new BufferLoader(
 			context,
@@ -144,7 +78,7 @@ var App = function (options){
 	}
 
 	var onPlaysound = function (serverPlaytime) {
-		var localPlaytime = getLocalPlaytime(serverPlaytime);
+		var localPlaytime = sync.getLocalEventTime(serverPlaytime);
 		playSound(sounds[1], localPlaytime);
 	};
 
@@ -161,8 +95,6 @@ var App = function (options){
 		console.log('delaytime', Math.round(delaytime*1000));
 
 		source.start(contexttime);
-
-
 	};
 
 	var blinkBackground = function () {
@@ -170,8 +102,7 @@ var App = function (options){
 		setTimeout(function () {
 			$('body').removeClass('blink');
 		},200);
-	}
-
+	};
 
 	return {
 		init: init

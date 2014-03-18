@@ -6,6 +6,7 @@ var path = require('path');
 var socketio = require('socket.io');
 var util = require('util');
 var utils = require('./utils');
+var sync = require('./sync.server.js');
 
 var app = express();
 
@@ -42,61 +43,15 @@ var io = socketio.listen(webserver);
 io.set('log level', 0);
 
 
+sync.activate({io: io});
 
-// syncing functions:
-io.sockets.on('connection', function (socket) {
-	console.log('[' + socket.handshake.address.address + '] user connected');
-
-	socket.on('ping', function (clienttime, socketCallback) {
-
-		// console.log('[' + socket.handshake.address.address + '] ping | clienttime: ' + Math.round(clienttime*1000));
-
-		//respond immediatly:
-		socketCallback({
-			clienttime: clienttime,
-			servertime: Date.now()/1000
-		});
-	});
-
-	socket.on('traveltime', function (traveltime) {
-		// just store the traveltime inside the socket:
-		socket.traveltime = traveltime;
-		console.log('[' + socket.handshake.address.address + '] traveltime: ' + Math.round(socket.traveltime*1000));
-	});
-
-	socket.on('cleartraveltime', function () {
-		socket.traveltime = null;
-		console.log('[' + socket.handshake.address.address + '] clearing traveltime');
-	});
-
-
-	socket.on('disconnect', function() {
-		console.log('[' + socket.handshake.address.address + '] user disconnected');
-	});
-});
-
-function getBiggestTraveltime () {
-	// find client with biggest travel time:
-	var biggestTravelTime = 0;
-	for (var i = io.sockets.clients().length - 1; i >= 0; i--) {
-		var socket = io.sockets.clients()[i];
-		if(!socket.traveltime) continue;
-		if( socket.traveltime > biggestTravelTime){
-			biggestTravelTime = socket.traveltime;
-		}
-	};
-	return biggestTravelTime;
-}
 
 
 // send out some sounds:
 function sendOutSound () {
-	var biggestTravelTime = getBiggestTraveltime();
-
-	console.log('biggestTravelTime: ' + Math.round(biggestTravelTime*1000));
 	// send out sound, but add biggest travel time, so that the slowest client still plays the sound in sync
 	// + add some time to make sure it doesn't arrive too early (currently 0.000)
-	io.sockets.emit('playsound', Date.now()/1000 + biggestTravelTime + 0.000 );
+	io.sockets.emit('playsound', sync.addTravelTime( Date.now()/1000 ) + 0.000 );
 }
 
 setInterval(sendOutSound, 2222);
